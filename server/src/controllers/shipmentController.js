@@ -44,7 +44,6 @@ const createShipment = async (req, res) => {
             message: "Shipment created successfully",
             shipment
         });
-
     } catch (error) {
         return res.status(400).json({
             success: false,
@@ -66,7 +65,6 @@ const getMyShipments = async (req, res) => {
             count: shipments.length,
             shipments
         });
-
     } catch (error) {
         return res.status(500).json({
             success: false,
@@ -103,7 +101,6 @@ const getShipmentById = async (req, res) => {
             success: true,
             shipment
         });
-
     } catch (error) {
         return res.status(500).json({
             success: false,
@@ -163,7 +160,6 @@ const updateShipment = async (req, res) => {
             message: "Shipment updated successfully",
             shipment
         });
-
     } catch (error) {
         return res.status(400).json({
             success: false,
@@ -208,7 +204,6 @@ const cancelShipment = async (req, res) => {
             message: "Shipment cancelled successfully",
             shipment
         });
-
     } catch (error) {
         return res.status(500).json({
             success: false,
@@ -217,8 +212,9 @@ const cancelShipment = async (req, res) => {
     }
 };
 
-// Update shipment progress by the assigned truck owner
 const updateShipmentStatus = async (req, res) => {
+    const session = await mongoose.startSession();
+
     try {
         const { id } = req.params;
         const { status: nextStatus } = req.body;
@@ -237,85 +233,152 @@ const updateShipmentStatus = async (req, res) => {
             });
         }
 
-        const shipment = await Shipment.findById(id);
+        let updatedShipment;
 
-        if (!shipment) {
-            return res.status(404).json({
-                success: false,
-                message: "Shipment not found"
-            });
-        }
+        await session.withTransaction(async () => {
+            const shipment = await Shipment.findById(id).session(session);
 
-        if (!shipment.bookedVehicleId) {
-            return res.status(400).json({
-                success: false,
-                message: "No truck is assigned to this shipment"
-            });
-        }
+            if (!shipment) {
+                const error = new Error("Shipment not found");
+                error.statusCode = 404;
+                throw error;
+            }
 
-        const vehicle = await Vehicle.findOne({
-            _id: shipment.bookedVehicleId,
-            ownerId: req.user.id
+            if (!shipment.bookedVehicleId) {
+                const error = new Error(
+                    "No truck is assigned to this shipment"
+                );
+                error.statusCode = 400;
+                throw error;
+            }
+
+            const vehicle = await Vehicle.findById(
+                shipment.bookedVehicleId
+            ).session(session);
+
+            if (!vehicle) {
+                const error = new Error("Assigned vehicle not found");
+                error.statusCode = 404;
+                throw error;
+            }
+
+            const isOwner =
+                ["individual_owner", "company_admin"].includes(req.user.role) &&
+                String(vehicle.ownerId) === String(req.user.id);
+
+            const isAssignedDriver =
+                req.user.role === "driver" &&
+                String(vehicle.assignedDriver) === String(req.user.id);
+
+            if (!isOwner && !isAssignedDriver) {
+                const error = new Error(
+                    "Only the assigned truck owner or driver can update this shipment"
+                );
+                error.statusCode = 403;
+                throw error;
+            }
+
+            const allowedTransitions = {
+                booked: "in_transit",
+                in_transit: "delivered"
+            };
+
+            if (allowedTransitions[shipment.status] !== nextStatus) {
+                const error = new Error(
+                    `Cannot change shipment from ${shipment.status} to ${nextStatus}`
+                );
+                error.statusCode = 400;
+                throw error;
+            }
+
+            updatedShipment = await Shipment.findOneAndUpdate(
+                {
+                    _id: id,
+                    status: shipment.status
+                },
+                {
+                    $set: {
+                        status: nextStatus
+                    }
+                },
+                {
+                    new: true,
+                    runValidators: true,
+                    session
+                }
+            );
+
+            if (!updatedShipment) {
+                const error = new Error(
+                    "Shipment status changed. Refresh and try again."
+                );
+                error.statusCode = 409;
+                throw error;
+            }
+
+            if (nextStatus === "delivered") {
+                const updatedVehicle = await Vehicle.findOneAndUpdate(
+                    { _id: vehicle._id },
+                    [
+                        {
+                            $set: {
+                                availableCapacityKg: {
+                                    $min: [
+                                        "$capacityKg",
+                                        {
+                                            $add: [
+                                                {
+                                                    $ifNull: [
+                                                        "$availableCapacityKg",
+                                                        "$capacityKg"
+                                                    ]
+                                                },
+                                                shipment.weightKg
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    {
+                        new: true,
+                        session,
+                        updatePipeline: true
+                    }
+                );
+
+                if (!updatedVehicle) {
+                    throw new Error(
+                        "Failed to restore truck capacity"
+                    );
+                }
+            }
         });
 
-        if (!vehicle) {
-            return res.status(403).json({
-                success: false,
-                message: "Only the assigned truck owner can update this shipment"
-            });
-        }
-
-        const allowedTransitions = {
-            booked: "in_transit",
-            in_transit: "delivered"
-        };
-
-        if (allowedTransitions[shipment.status] !== nextStatus) {
-            return res.status(400).json({
-                success: false,
-                message: `Cannot change shipment from ${shipment.status} to ${nextStatus}`
-            });
-        }
-
-        const updatedShipment = await Shipment.findOneAndUpdate(
-            {
-                _id: id,
-                status: shipment.status
-            },
-            {
-                $set: {
-                    status: nextStatus
-                }
-            },
-            {
-                new: true,
-                runValidators: true
-            }
-        ).populate(
+        await updatedShipment.populate(
             "bookedVehicleId",
             "vehicleNumber vehicleType make model"
         );
 
-        if (!updatedShipment) {
-            return res.status(409).json({
-                success: false,
-                message: "Shipment status changed. Refresh and try again."
-            });
-        }
-
         return res.status(200).json({
             success: true,
-            message: `Shipment status updated to ${nextStatus}`,
+            message:
+                nextStatus === "delivered"
+                    ? "Shipment delivered and truck capacity restored"
+                    : "Shipment status updated to in_transit",
             shipment: updatedShipment
         });
 
     } catch (error) {
         console.error("Shipment status update error:", error);
 
-        return res.status(500).json({
+        return res.status(error.statusCode || 500).json({
             success: false,
             message: error.message || "Failed to update shipment status"
         });
+    } finally {
+        await session.endSession();
     }
 };
 

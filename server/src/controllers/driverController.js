@@ -166,7 +166,6 @@ const deleteDriver = async (req, res) => {
     }
 };
 
-// Get vehicles and shipments assigned to the logged-in driver
 const getMyWork = async (req, res) => {
     try {
         if (req.user.role !== "driver") {
@@ -219,9 +218,62 @@ const getMyWork = async (req, res) => {
     }
 };
 
+// Reset a driver's password by their creating owner
+const resetDriverPassword = async (req, res) => {
+    try {
+        if (!checkOwnerPermission(req, res)) return;
+
+        const { id } = req.params;
+        const { newPassword } = req.body;
+
+        if (!mongoose.isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid driver ID"
+            });
+        }
+
+        if (!newPassword || newPassword.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: "New password must contain at least 8 characters"
+            });
+        }
+
+        const driver = await User.findOne({
+            _id: id,
+            role: "driver",
+            createdBy: req.user.id
+        }).select("+password");
+
+        if (!driver) {
+            return res.status(404).json({
+                success: false,
+                message: "Driver not found"
+            });
+        }
+
+        driver.password = newPassword;
+        await driver.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Driver password reset successfully"
+        });
+    } catch (error) {
+        console.error("Reset driver password error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to reset driver password"
+        });
+    }
+};
+
 module.exports = {
     createDriver,
     getMyDrivers,
     deleteDriver,
-    getMyWork
+    getMyWork,
+    resetDriverPassword
 };
