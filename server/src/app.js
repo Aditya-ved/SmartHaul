@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 
@@ -7,6 +8,7 @@ const shipmentRoutes = require("./routes/shipmentRoutes");
 const matchingRoutes = require("./routes/matchingRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 const driverRoutes = require("./routes/driverRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -27,4 +29,6 @@ app.use("/api/shipments", shipmentRoutes);
 app.use("/api/matching", matchingRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/drivers", driverRoutes);
+app.use("/api/admin", adminRoutes);
+
 module.exports = app;

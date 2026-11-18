@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
     Truck,
     UserCircle,
@@ -16,7 +16,11 @@ function Navbar() {
     const [checkingAuth, setCheckingAuth] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    const navigate = useNavigate();
+    const getDashboardPath = (role) => {
+        if (role === "admin") return "/admin-dashboard";
+        if (role === "driver") return "/driver-dashboard";
+        return "/dashboard";
+    };
 
     useEffect(() => {
         let active = true;
@@ -68,16 +72,22 @@ function Navbar() {
 
         window.dispatchEvent(new Event("auth-change"));
 
-        navigate("/login");
+        window.location.replace("/");
     };
 
     const closeMobileMenu = () => {
         setMobileMenuOpen(false);
     };
 
+    const dashboardPath = user
+        ? getDashboardPath(user.role)
+        : "/login";
+
+    const canManageFleet = user &&
+        ["individual_owner", "company_admin"].includes(user.role);
+
     return (
         <header className="navbar">
-
             <Link
                 to="/"
                 className="brand"
@@ -93,7 +103,6 @@ function Navbar() {
             </Link>
 
             <nav className={`nav-links ${mobileMenuOpen ? "mobile-open" : ""}`}>
-
                 <a href="/#services" onClick={closeMobileMenu}>
                     Services
                 </a>
@@ -106,7 +115,7 @@ function Navbar() {
                     About Us
                 </a>
 
-                {user && (
+                {canManageFleet && (
                     <Link
                         to="/fleet"
                         className="mobile-fleet-link"
@@ -115,35 +124,36 @@ function Navbar() {
                         Fleet Management
                     </Link>
                 )}
-
             </nav>
 
             <div className="nav-actions">
-
                 {!checkingAuth && (
                     user ? (
-
                         <div className="nav-user">
-
                             <Link
-                                to="/dashboard"
+                                to={dashboardPath}
                                 className="profile-link"
+                                onClick={closeMobileMenu}
                             >
                                 <UserCircle size={22} />
                                 <span>{user.fullName}</span>
                             </Link>
 
-                            <Link
-                                to="/fleet"
-                                className="dashboard-link"
-                            >
-                                <Truck size={17} />
-                                My Fleet
-                            </Link>
+                            {canManageFleet && (
+                                <Link
+                                    to="/fleet"
+                                    className="dashboard-link"
+                                    onClick={closeMobileMenu}
+                                >
+                                    <Truck size={17} />
+                                    My Fleet
+                                </Link>
+                            )}
 
                             <Link
-                                to="/dashboard"
+                                to={dashboardPath}
                                 className="dashboard-link"
+                                onClick={closeMobileMenu}
                             >
                                 <LayoutDashboard size={17} />
                                 Dashboard
@@ -156,11 +166,8 @@ function Navbar() {
                                 <LogOut size={17} />
                                 Log out
                             </button>
-
                         </div>
-
                     ) : (
-
                         <>
                             <Link to="/login" className="login-link">
                                 Log in
@@ -170,10 +177,8 @@ function Navbar() {
                                 Get Started
                             </Link>
                         </>
-
                     )
                 )}
-
             </div>
 
             <button
@@ -184,7 +189,6 @@ function Navbar() {
             >
                 {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-
         </header>
     );
 }

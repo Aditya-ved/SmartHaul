@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const Shipment = require("../models/Shipment");
 const Vehicle = require("../models/Vehicle");
 
+const escapeRegex = (value) => {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const bookTruck = async (req, res) => {
     let reservedVehicleId = null;
     let reservedWeight = 0;
@@ -42,14 +46,15 @@ const bookTruck = async (req, res) => {
         const vehicle = await Vehicle.findOneAndUpdate(
             {
                 _id: vehicleId,
+                verificationStatus: "verified",
                 availability: "available",
                 status: "active",
                 currentCity: new RegExp(
-                    `^${pickupCity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                    `^${escapeRegex(pickupCity)}$`,
                     "i"
                 ),
                 destinationCity: new RegExp(
-                    `^${deliveryCity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                    `^${escapeRegex(deliveryCity)}$`,
                     "i"
                 ),
                 $expr: {
@@ -84,13 +89,13 @@ const bookTruck = async (req, res) => {
             {
                 new: true,
                 updatePipeline: true
-        }
+            }
         );
 
         if (!vehicle) {
             return res.status(409).json({
                 success: false,
-                message: "Truck is unavailable or does not have enough capacity"
+                message: "Truck is unavailable, unverified, or does not have enough capacity"
             });
         }
 

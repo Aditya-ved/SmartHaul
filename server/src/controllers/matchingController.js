@@ -37,6 +37,7 @@ const findMatchingVehicles = async (req, res) => {
         const deliveryCity = shipment.deliveryLocation.city.trim().toLowerCase();
 
         const vehicles = await Vehicle.find({
+            verificationStatus: "verified",
             availability: "available",
             status: "active",
             $or: [

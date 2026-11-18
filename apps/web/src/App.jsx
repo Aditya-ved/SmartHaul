@@ -9,6 +9,7 @@ import FleetManagement from "./pages/FleetManagement";
 import DriverManagement from "./pages/DriverManagement";
 import ShipmentManagement from "./pages/ShipmentManagement";
 import DriverDashboard from "./pages/DriverDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import "./App.css";
@@ -46,6 +47,17 @@ function App() {
                     <Route
                         path="/driver-dashboard"
                         element={<DriverDashboard />}
+                    />
+                </Route>
+
+                <Route
+                    element={
+                        <ProtectedRoute allowedRoles={["admin"]} />
+                    }
+                >
+                    <Route
+                        path="/admin-dashboard"
+                        element={<AdminDashboard />}
                     />
                 </Route>
             </Routes>
